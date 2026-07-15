@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  mysql_db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: notifications_db
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./init-db:/docker-entrypoint-initdb.d
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672" # AMQP protocol
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+
+  notification_service:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      DB_HOST: mysql_db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: rootpassword
+      DB_NAME: notifications_db
+      MQ_HOST: rabbitmq
+      MQ_PORT: 5672
+      MQ_USER: guest
+      MQ_PASS: guest
+      MAX_RETRIES: 3
+      RETRY_INITIAL_DELAY: 1
+      RETRY_BACKOFF_FACTOR: 5
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql_db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
