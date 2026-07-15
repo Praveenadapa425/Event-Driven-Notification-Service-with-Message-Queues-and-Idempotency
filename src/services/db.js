@@ -30,15 +30,28 @@ async function getEventStatus(eventId) {
 
 /**
  * Atomically attempts to register a new event as PROCESSING.
- * If the event already exists, returns the current status.
+ * If the event already exists with status 'RETRYING', it transitions it to 'PROCESSING'.
+ * If the event is COMPLETED, PROCESSING, or FAILED, it returns the current status.
  */
 async function tryRegisterEvent(eventId) {
   const currentPool = getPool();
   try {
+    // 1. Attempt to insert as PROCESSING (first-time delivery)
     await currentPool.query('INSERT INTO processed_events (event_id, status) VALUES (?, ?)', [eventId, 'PROCESSING']);
     return { success: true, status: 'PROCESSING' };
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
+      // 2. Attempt to transition status from RETRYING back to PROCESSING (retry delivery)
+      const [updateResult] = await currentPool.query(
+        "UPDATE processed_events SET status = 'PROCESSING' WHERE event_id = ? AND status = 'RETRYING'",
+        [eventId]
+      );
+      if (updateResult.affectedRows === 1) {
+        logger.info('Transitioned event from RETRYING to PROCESSING', { eventId });
+        return { success: true, status: 'PROCESSING' };
+      }
+
+      // 3. If no row affected, it is actively processing, completed, or failed. Fetch current status.
       const currentStatus = await getEventStatus(eventId);
       return { success: false, status: currentStatus };
     }

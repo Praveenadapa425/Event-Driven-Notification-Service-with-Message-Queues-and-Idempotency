@@ -50,6 +50,7 @@ async function startConsumer() {
 
         if (regResult.status === 'PROCESSING') {
           logger.warn('Event is currently being processed by another consumer, requeueing', { event_id });
+          // Sleep for 1 second before requeueing to avoid connection thrashing
           setTimeout(() => {
             try {
               channel.nack(msg, false, true); // requeue = true
@@ -125,6 +126,9 @@ async function startConsumer() {
         });
 
         try {
+          // Update DB status to RETRYING so that subsequent retry attempts can be processed
+          await db.updateEventStatus(event_id, 'RETRYING');
+
           // Declare delay queue dynamically with TTL and dead-letter routing to main queue
           await channel.assertQueue(delayQueueName, {
             durable: true,

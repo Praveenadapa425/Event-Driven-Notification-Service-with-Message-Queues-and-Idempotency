@@ -55,7 +55,7 @@ services:
       MQ_PASS: guest
       MAX_RETRIES: 3
       RETRY_INITIAL_DELAY: 1
-      RETRY_BACKOFF_FACTOR: 5
+      RETRY_BACKOFF_FACTOR: 2
     depends_on:
       rabbitmq:
         condition: service_healthy
