@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const { PermanentError } = require('../utils/errors');
 
 /**
  * Simulates dispatch of a notification to an external gateway.
@@ -16,13 +17,13 @@ async function mockDispatchNotification(event, retryCount = 0) {
   await new Promise(resolve => setTimeout(resolve, 100));
 
   if (payload) {
-    // 1. Permanent failure flag
+    // 1. Permanent failure flag -> throws PermanentError
     if (payload.should_fail === true) {
       logger.warn('Mock dispatch: injected permanent failure triggered', { event_id });
-      throw new Error('Gateway rejection: Invalid recipient address (simulated permanent failure)');
+      throw new PermanentError('Gateway rejection: Invalid recipient address (simulated permanent failure)');
     }
 
-    // 2. Transient failure flag: fails until a certain retry count is reached
+    // 2. Transient failure flag -> throws standard Error (transient)
     if (payload.fail_attempts && retryCount < payload.fail_attempts) {
       logger.warn('Mock dispatch: injected transient failure triggered', { event_id, retryCount, fail_attempts: payload.fail_attempts });
       throw new Error(`Gateway timeout: connection reset (simulated transient failure, retry ${retryCount}/${payload.fail_attempts})`);
